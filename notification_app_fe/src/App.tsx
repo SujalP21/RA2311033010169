@@ -27,9 +27,11 @@ export default function App() {
           sx={{
             flexGrow: 1,
             ml: isMobile ? 0 : `${DRAWER_W}px`,
-            p: { xs: 2, sm: 3, md: 4 },
+            p: { xs: 2, sm: 3, md: 4, lg: 5 },
             pt: isMobile ? 8 : 4,
-            maxWidth: 1100,
+            mx: "auto",
+            width: "100%",
+            maxWidth: 960,
           }}
         >
           <Routes>

@@ -101,9 +101,10 @@ notification_app_be/
 
 notification_app_fe/
 ├── src/
-│   ├── main.tsx         # React entry
-│   ├── App.tsx          # Router setup
-│   ├── index.css        # Global earthy theme styles
+│   ├── main.tsx         # React entry with MUI ThemeProvider
+│   ├── App.tsx          # Router + responsive drawer layout
+│   ├── theme.ts         # MUI createTheme — earthy palette
+│   ├── index.css        # Minimal resets (scrollbar, nav active)
 │   ├── types.ts
 │   ├── services/
 │   │   ├── auth.ts      # Browser token management
@@ -113,13 +114,14 @@ notification_app_fe/
 │   │   ├── useNotifications.ts
 │   │   └── useViewedState.ts
 │   ├── components/
-│   │   ├── Sidebar.tsx
-│   │   ├── FilterBar.tsx
-│   │   ├── NotificationCard.tsx
-│   │   └── Pagination.tsx
+│   │   ├── Sidebar.tsx        # MUI Drawer (permanent / temporary)
+│   │   ├── FilterBar.tsx      # MUI ToggleButtonGroup + Select
+│   │   ├── NotificationCard.tsx  # MUI Card, Chip, Badge
+│   │   └── Pagination.tsx     # MUI Button navigation
 │   └── pages/
 │       ├── AllNotifications.tsx
 │       └── PriorityInbox.tsx
+├── demo/                # Screenshots and recordings
 ├── vite.config.ts
 ├── tsconfig.json
 └── package.json
@@ -173,21 +175,23 @@ The logging middleware is called at key decision points across both backend and 
 ### Tech Stack
 - React 18 with TypeScript
 - Vite dev server (port 3000)
-- Vanilla CSS with earthy color palette
+- Material UI for component styling
+- MUI custom theme with earthy color palette
 - React Router for page navigation
 
 ### Pages
 
 **All Notifications** (`/`)
 - Paginated list with server-side `limit`/`page` params
-- Type filter (Placement / Result / Event)
-- Stats bar showing counts by type
+- Type filter using MUI ToggleButtonGroup (Placement / Result / Event)
+- Stats bar with MUI Paper cards showing counts by type
 - New vs viewed distinction using localStorage
+- MUI CircularProgress for loading, Alert for errors
 
 **Priority Inbox** (`/priority`)
 - Client-side ranking using composite scoring
-- Configurable top-N (5/10/15/20)
-- Priority scores displayed on each card
+- Configurable top-N (5/10/15/20) via MUI Select
+- Priority scores displayed as MUI Chip on each card
 - Same type filtering capability
 
 ### API Proxy
@@ -202,4 +206,23 @@ The auth token is obtained in-browser and attached to every request.
 
 ### New vs Viewed
 
-Notification IDs are tracked in `localStorage` under `viewed_notifs`. Clicking a notification marks it as viewed. New notifications show a pulsing terracotta dot; viewed ones are slightly dimmed.
+Notification IDs are tracked in `localStorage` under `viewed_notifs`. Clicking a notification marks it as viewed. New notifications show a MUI Badge dot indicator; viewed ones are dimmed with a check icon.
+
+---
+
+## Output Screenshots
+
+### Desktop — All Notifications
+![All Notifications](notification_app_fe/demo/desktop-all-notifications.png)
+
+### Desktop — Priority Inbox
+![Priority Inbox](notification_app_fe/demo/desktop-priority-inbox.png)
+
+### Mobile — All Notifications
+![Mobile All](notification_app_fe/demo/mobile-all-notifications.png)
+
+### Mobile — Sidebar Navigation
+![Mobile Sidebar](notification_app_fe/demo/mobile-sidebar.png)
+
+### Mobile — Priority Inbox
+![Mobile Priority](notification_app_fe/demo/mobile-priority-inbox.png)
