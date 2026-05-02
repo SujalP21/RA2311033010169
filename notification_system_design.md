@@ -210,7 +210,11 @@ Notification IDs are tracked in `localStorage` under `viewed_notifs`. Clicking a
 
 ---
 
-## Output Screenshots
+## Output
+
+### Video Recording
+
+[App Demo Recording](notification_app_fe/demo/recording.mp4)
 
 ### Desktop — All Notifications
 ![All Notifications](notification_app_fe/demo/desktop-all-notifications.png)
@@ -226,3 +230,4 @@ Notification IDs are tracked in `localStorage` under `viewed_notifs`. Clicking a
 
 ### Mobile — Priority Inbox
 ![Mobile Priority](notification_app_fe/demo/mobile-priority-inbox.png)
+
