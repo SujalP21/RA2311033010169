@@ -1,19 +1,16 @@
-/**
- * Browser-compatible auth service.
- * Gets and caches Bearer tokens for evaluation service API calls.
- */
+// gets and caches bearer token for API calls
+// reads credentials from Vite env variables
 
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
+let _token: string | null = null;
+let _expiresAt = 0;
 
 export async function getToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
 
-  if (cachedToken && tokenExpiresAt - now > 60) {
-    return cachedToken;
-  }
+  // reuse cached token if still valid
+  if (_token && _expiresAt - now > 60) return _token;
 
-  const response = await fetch("/api/auth", {
+  const res = await fetch("/api/auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -26,13 +23,12 @@ export async function getToken(): Promise<string> {
     }),
   });
 
-  if (!response.ok && response.status !== 201) {
-    throw new Error(`Auth failed: HTTP ${response.status}`);
+  if (!res.ok && res.status !== 201) {
+    throw new Error(`Auth failed: ${res.status}`);
   }
 
-  const data = await response.json();
-  cachedToken = data.access_token;
-  tokenExpiresAt = data.expires_in;
-
-  return cachedToken!;
+  const data = await res.json();
+  _token = data.access_token;
+  _expiresAt = data.expires_in;
+  return _token!;
 }

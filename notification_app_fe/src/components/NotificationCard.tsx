@@ -1,42 +1,36 @@
 import type { Notification } from "../types";
 
-interface NotificationCardProps {
+interface Props {
   notification: Notification;
   isViewed: boolean;
   onView: (id: string) => void;
   score?: number;
 }
 
-function formatTimestamp(ts: string): string {
-  const date = new Date(ts);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
+// relative time string like "3h ago", "2d ago"
+function timeAgo(ts: string): string {
+  const d = new Date(ts);
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
 
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
 
-  return date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
   });
 }
 
-export function NotificationCard({ notification, isViewed, onView, score }: NotificationCardProps) {
+export function NotificationCard({ notification, isViewed, onView, score }: Props) {
   const { ID, Type, Message, Timestamp } = notification;
-  const typeClass = Type.toLowerCase();
 
   const handleClick = () => {
-    if (!isViewed) {
-      onView(ID);
-    }
+    if (!isViewed) onView(ID);
   };
 
   return (
@@ -47,25 +41,19 @@ export function NotificationCard({ notification, isViewed, onView, score }: Noti
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && handleClick()}
     >
-      {isViewed ? (
-        <div className="viewed-indicator" />
-      ) : (
-        <div className="new-indicator" />
-      )}
+      <div className={isViewed ? "viewed-indicator" : "new-indicator"} />
 
       <div className="card-content">
         <div className="card-top">
-          <span className={`type-badge ${typeClass}`}>{Type}</span>
+          <span className={`type-badge ${Type.toLowerCase()}`}>{Type}</span>
           {isViewed && <span className="viewed-tag">viewed</span>}
         </div>
         <div className="card-message">{Message}</div>
-        <div className="card-timestamp">{formatTimestamp(Timestamp)}</div>
+        <div className="card-timestamp">{timeAgo(Timestamp)}</div>
       </div>
 
       {score !== undefined && (
-        <div className="card-score">
-          ⚡ {score}
-        </div>
+        <div className="card-score">⚡ {score}</div>
       )}
     </div>
   );

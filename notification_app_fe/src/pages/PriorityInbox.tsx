@@ -11,47 +11,39 @@ export function PriorityInbox() {
   const [typeFilter, setTypeFilter] = useState<NotificationType | null>(null);
   const [topN, setTopN] = useState(10);
 
-  // fetch all available notifications to rank client-side
+  // get notifications then rank them client-side
   const { notifications, loading, error, reload } = useNotifications({
     page: 1,
     notificationType: typeFilter,
   });
 
-  const { markAsViewed, isViewed } = useViewedState();
+  const { markViewed, isViewed } = useViewedState();
 
-  // rank and take top N
   const ranked: ScoredNotification[] = useMemo(() => {
     if (notifications.length === 0) return [];
     return rankNotifications(notifications, topN);
   }, [notifications, topN]);
 
-  // log when ranking completes
   useEffect(() => {
     if (ranked.length > 0) {
-      Log("frontend", "info", "page", `Priority inbox: showing top ${ranked.length} of ${notifications.length}`);
+      Log("frontend", "info", "page",
+        `priority: top ${ranked.length} of ${notifications.length}`);
     }
   }, [ranked.length, notifications.length]);
 
-  // stats from ranked results
   const stats = useMemo(() => {
-    const counts = { total: ranked.length, Placement: 0, Result: 0, Event: 0 };
-    ranked.forEach((n) => { counts[n.Type]++; });
-    return counts;
+    const c = { total: ranked.length, Placement: 0, Result: 0, Event: 0 };
+    ranked.forEach((n) => { c[n.Type]++; });
+    return c;
   }, [ranked]);
-
-  const handleTypeChange = async (type: NotificationType | null) => {
-    setTypeFilter(type);
-    await Log("frontend", "info", "page", `Priority filter: ${type || "all"}`);
-  };
 
   return (
     <div>
       <div className="page-header">
         <h2>Priority Inbox</h2>
-        <p>Top notifications ranked by importance (Placement &gt; Result &gt; Event) and recency</p>
+        <p>Top notifications ranked by type importance and recency</p>
       </div>
 
-      {/* stats */}
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -73,7 +65,10 @@ export function PriorityInbox() {
 
       <FilterBar
         activeType={typeFilter}
-        onTypeChange={handleTypeChange}
+        onTypeChange={(t) => {
+          setTypeFilter(t);
+          Log("frontend", "info", "page", `priority filter: ${t || "all"}`);
+        }}
         limit={topN}
         onLimitChange={setTopN}
       />
@@ -87,25 +82,23 @@ export function PriorityInbox() {
 
       {error && (
         <div className="error-state">
-          <p>Failed to load: {error}</p>
+          <p>Error: {error}</p>
           <button onClick={reload}>Retry</button>
         </div>
       )}
 
       {!loading && !error && ranked.length === 0 && (
-        <div className="empty-state">
-          <p>No notifications to rank.</p>
-        </div>
+        <div className="empty-state">Nothing to rank.</div>
       )}
 
       {!loading && !error && ranked.length > 0 && (
         <div className="notifications-grid">
-          {ranked.map((n, idx) => (
+          {ranked.map((n) => (
             <NotificationCard
               key={n.ID}
               notification={n}
               isViewed={isViewed(n.ID)}
-              onView={markAsViewed}
+              onView={markViewed}
               score={n.priorityScore}
             />
           ))}

@@ -18,43 +18,36 @@ export function AllNotifications() {
     notificationType: typeFilter,
   });
 
-  const { markAsViewed, isViewed } = useViewedState();
+  const { markViewed, isViewed } = useViewedState();
 
-  // compute stats from current batch
   const stats = useMemo(() => {
-    const counts = { total: notifications.length, Placement: 0, Result: 0, Event: 0, newCount: 0 };
+    const c = { total: notifications.length, Placement: 0, Result: 0, Event: 0, unread: 0 };
     notifications.forEach((n) => {
-      counts[n.Type]++;
-      if (!isViewed(n.ID)) counts.newCount++;
+      c[n.Type]++;
+      if (!isViewed(n.ID)) c.unread++;
     });
-    return counts;
+    return c;
   }, [notifications, isViewed]);
 
-  const handleTypeChange = async (type: NotificationType | null) => {
-    setTypeFilter(type);
+  const onTypeChange = async (t: NotificationType | null) => {
+    setTypeFilter(t);
     setPage(1);
-    await Log("frontend", "info", "page", `Filter changed to: ${type || "all"}`);
+    await Log("frontend", "info", "page", `filter: ${t || "all"}`);
   };
 
-  const handleLimitChange = async (newLimit: number) => {
-    setLimit(newLimit);
+  const onLimitChange = async (l: number) => {
+    setLimit(l);
     setPage(1);
-    await Log("frontend", "info", "page", `Limit changed to: ${newLimit}`);
-  };
-
-  const handlePageChange = async (newPage: number) => {
-    setPage(newPage);
-    await Log("frontend", "info", "page", `Navigated to page ${newPage}`);
+    await Log("frontend", "info", "page", `limit: ${l}`);
   };
 
   return (
     <div>
       <div className="page-header">
         <h2>All Notifications</h2>
-        <p>Browse all campus notifications with filtering and pagination</p>
+        <p>Browse campus notifications with type filters and pagination</p>
       </div>
 
-      {/* stats */}
       <div className="stats-row">
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -73,36 +66,34 @@ export function AllNotifications() {
           <div className="stat-label">Events</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{stats.newCount}</div>
+          <div className="stat-value">{stats.unread}</div>
           <div className="stat-label">New</div>
         </div>
       </div>
 
       <FilterBar
         activeType={typeFilter}
-        onTypeChange={handleTypeChange}
+        onTypeChange={onTypeChange}
         limit={limit}
-        onLimitChange={handleLimitChange}
+        onLimitChange={onLimitChange}
       />
 
       {loading && (
         <div className="loading-state">
           <div className="spinner" />
-          <span>Loading notifications...</span>
+          <span>Loading...</span>
         </div>
       )}
 
       {error && (
         <div className="error-state">
-          <p>Failed to load notifications: {error}</p>
+          <p>Error: {error}</p>
           <button onClick={reload}>Retry</button>
         </div>
       )}
 
       {!loading && !error && notifications.length === 0 && (
-        <div className="empty-state">
-          <p>No notifications found for this filter.</p>
-        </div>
+        <div className="empty-state">No notifications match this filter.</div>
       )}
 
       {!loading && !error && notifications.length > 0 && (
@@ -113,14 +104,13 @@ export function AllNotifications() {
                 key={n.ID}
                 notification={n}
                 isViewed={isViewed(n.ID)}
-                onView={markAsViewed}
+                onView={markViewed}
               />
             ))}
           </div>
-
           <Pagination
             currentPage={page}
-            onPageChange={handlePageChange}
+            onPageChange={(p) => { setPage(p); Log("frontend", "info", "page", `page ${p}`); }}
             hasMore={notifications.length === limit}
           />
         </>

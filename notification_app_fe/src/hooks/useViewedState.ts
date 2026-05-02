@@ -1,43 +1,36 @@
 import { useState, useCallback, useEffect } from "react";
 import { Log } from "../services/logger";
 
-const STORAGE_KEY = "viewed_notifications";
+const KEY = "viewed_notifs";
 
-/**
- * Tracks which notification IDs have been viewed by the user.
- * Persists to localStorage so state survives page refreshes.
- */
+// keeps track of which notification IDs the user has already seen
+// uses localStorage so it persists across refreshes
 export function useViewedState() {
-  const [viewedIds, setViewedIds] = useState<Set<string>>(() => {
+  const [seen, setSeen] = useState<Set<string>>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? new Set(JSON.parse(stored)) : new Set();
+      const raw = localStorage.getItem(KEY);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
     } catch {
       return new Set();
     }
   });
 
-  // persist to localStorage whenever viewedIds changes
+  // sync to localStorage when the set changes
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...viewedIds]));
-  }, [viewedIds]);
+    localStorage.setItem(KEY, JSON.stringify([...seen]));
+  }, [seen]);
 
-  const markAsViewed = useCallback(async (id: string) => {
-    setViewedIds((prev) => {
+  const markViewed = useCallback(async (id: string) => {
+    setSeen((prev) => {
       if (prev.has(id)) return prev;
       const next = new Set(prev);
       next.add(id);
       return next;
     });
-    await Log("frontend", "debug", "state", `Notification ${id.substring(0, 8)}... marked as viewed`);
+    await Log("frontend", "debug", "state", `marked ${id.slice(0, 8)}... viewed`);
   }, []);
 
-  const isViewed = useCallback(
-    (id: string) => viewedIds.has(id),
-    [viewedIds]
-  );
+  const isViewed = useCallback((id: string) => seen.has(id), [seen]);
 
-  const viewedCount = viewedIds.size;
-
-  return { markAsViewed, isViewed, viewedCount };
+  return { markViewed, isViewed, viewedCount: seen.size };
 }

@@ -1,124 +1,110 @@
 import * as http from "http";
 import { getToken } from "./auth";
 
-const LOG_API_URL = "http://20.207.122.201/evaluation-service/logs";
+const LOG_URL = "http://20.207.122.201/evaluation-service/logs";
 
-// valid values as defined by the evaluation service
-const VALID_STACKS = ["backend", "frontend"] as const;
-const VALID_LEVELS = ["debug", "info", "warn", "error", "fatal"] as const;
+// allowed values — these are enforced by the evaluation service API
+const STACKS = ["backend", "frontend"] as const;
+const LEVELS = ["debug", "info", "warn", "error", "fatal"] as const;
 
-const BACKEND_PACKAGES = [
+const BE_PACKAGES = [
   "cache", "controller", "cron_job", "db", "domain",
   "handler", "repository", "route", "service",
 ] as const;
 
-const FRONTEND_PACKAGES = [
+const FE_PACKAGES = [
   "api", "component", "hook", "page", "state", "style",
 ] as const;
 
-const SHARED_PACKAGES = ["auth", "config", "middleware", "utils"] as const;
+const COMMON_PACKAGES = ["auth", "config", "middleware", "utils"] as const;
 
-export type Stack = (typeof VALID_STACKS)[number];
-export type Level = (typeof VALID_LEVELS)[number];
-export type BackendPackage = (typeof BACKEND_PACKAGES)[number] | (typeof SHARED_PACKAGES)[number];
-export type FrontendPackage = (typeof FRONTEND_PACKAGES)[number] | (typeof SHARED_PACKAGES)[number];
-export type Package = BackendPackage | FrontendPackage;
+export type Stack = (typeof STACKS)[number];
+export type Level = (typeof LEVELS)[number];
+export type BackendPkg = (typeof BE_PACKAGES)[number] | (typeof COMMON_PACKAGES)[number];
+export type FrontendPkg = (typeof FE_PACKAGES)[number] | (typeof COMMON_PACKAGES)[number];
+export type Pkg = BackendPkg | FrontendPkg;
 
-interface LogResponse {
-  success: boolean;
-  status?: number;
-  body?: unknown;
-  error?: string;
-  detail?: string;
-}
-
-const VALID_PACKAGES: Record<Stack, readonly string[]> = {
-  backend: [...BACKEND_PACKAGES, ...SHARED_PACKAGES],
-  frontend: [...FRONTEND_PACKAGES, ...SHARED_PACKAGES],
+// map stack -> allowed packages for that stack
+const PKG_MAP: Record<Stack, readonly string[]> = {
+  backend: [...BE_PACKAGES, ...COMMON_PACKAGES],
+  frontend: [...FE_PACKAGES, ...COMMON_PACKAGES],
 };
 
-function validateParams(stack: string, level: string, pkg: string, message: string): void {
-  if (!VALID_STACKS.includes(stack as Stack)) {
-    throw new Error(`Invalid stack "${stack}". Must be one of: ${VALID_STACKS.join(", ")}`);
-  }
-  if (!VALID_LEVELS.includes(level as Level)) {
-    throw new Error(`Invalid level "${level}". Must be one of: ${VALID_LEVELS.join(", ")}`);
-  }
-  if (!pkg || typeof pkg !== "string") {
-    throw new Error("Package name must be a non-empty string.");
-  }
-  const allowed = VALID_PACKAGES[stack as Stack];
-  if (!allowed.includes(pkg)) {
-    throw new Error(
-      `Invalid package "${pkg}" for stack "${stack}". Allowed: ${allowed.join(", ")}`
-    );
-  }
-  if (!message || typeof message !== "string") {
-    throw new Error("Message must be a non-empty string.");
-  }
+interface LogResult {
+  ok: boolean;
+  status?: number;
+  data?: unknown;
+  err?: string;
 }
 
-/**
- * Sends a structured log entry to the evaluation service.
- *
- * @param stack - "backend" or "frontend"
- * @param level - severity: debug | info | warn | error | fatal
- * @param pkg - module/package name (must be valid for the given stack)
- * @param message - human-readable description
- */
+// validates all four params before sending to the API
+function check(stack: string, level: string, pkg: string, msg: string): void {
+  if (!STACKS.includes(stack as Stack))
+    throw new Error(`Bad stack "${stack}"`);
+  if (!LEVELS.includes(level as Level))
+    throw new Error(`Bad level "${level}"`);
+  if (!pkg || !PKG_MAP[stack as Stack]?.includes(pkg))
+    throw new Error(`Bad package "${pkg}" for stack "${stack}"`);
+  if (!msg)
+    throw new Error("Message cannot be empty");
+}
+
+// sends a log entry to the evaluation service
+// usage: await Log("frontend", "info", "page", "user opened dashboard")
 export async function Log(
   stack: Stack,
   level: Level,
-  pkg: Package,
+  pkg: Pkg,
   message: string
-): Promise<LogResponse> {
-  validateParams(stack, level, pkg, message);
+): Promise<LogResult> {
+  check(stack, level, pkg, message);
 
   let token: string;
   try {
     token = await getToken();
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[LogMiddleware] Auth failure: ${msg}\n`);
-    return { success: false, error: "auth_failure", detail: msg };
+  } catch (e: unknown) {
+    const detail = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[log-mw] auth error: ${detail}\n`);
+    return { ok: false, err: detail };
   }
 
-  const payload = JSON.stringify({ stack, level, package: pkg, message });
+  const body = JSON.stringify({ stack, level, package: pkg, message });
 
   return new Promise((resolve) => {
-    const urlObj = new URL(LOG_API_URL);
+    const parsed = new URL(LOG_URL);
 
-    const options: http.RequestOptions = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || 80,
-      path: urlObj.pathname,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(payload),
-        Authorization: `Bearer ${token}`,
+    const req = http.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 80,
+        path: parsed.pathname,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+          Authorization: `Bearer ${token}`,
+        },
       },
-    };
+      (res) => {
+        let raw = "";
+        res.on("data", (c: string) => (raw += c));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(raw);
+            resolve({ ok: res.statusCode === 200, status: res.statusCode!, data: parsed });
+          } catch {
+            resolve({ ok: false, status: res.statusCode!, data: raw });
+          }
+        });
+      }
+    );
 
-    const req = http.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk: string) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const body = JSON.parse(data);
-          resolve({ success: res.statusCode === 200, status: res.statusCode!, body });
-        } catch {
-          resolve({ success: false, status: res.statusCode!, body: data });
-        }
-      });
+    req.on("error", (e) => {
+      process.stderr.write(`[log-mw] network: ${e.message}\n`);
+      resolve({ ok: false, err: e.message });
     });
 
-    req.on("error", (err) => {
-      process.stderr.write(`[LogMiddleware] Network error: ${err.message}\n`);
-      resolve({ success: false, error: "network_error", detail: err.message });
-    });
-
-    req.write(payload);
+    req.write(body);
     req.end();
   });
 }

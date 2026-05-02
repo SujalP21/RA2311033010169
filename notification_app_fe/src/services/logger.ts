@@ -1,20 +1,18 @@
-/**
- * Browser-compatible logging middleware.
- * Reimplements the Log(stack, level, package, message) interface
- * using fetch API for browser execution.
- */
+// browser-side logging middleware
+// same Log(stack, level, pkg, msg) interface as the backend package
+// but uses fetch instead of node http
 
 import { getToken } from "./auth";
 
 type Stack = "backend" | "frontend";
 type Level = "debug" | "info" | "warn" | "error" | "fatal";
-type FrontendPackage = "api" | "component" | "hook" | "page" | "state" | "style" |
-  "auth" | "config" | "middleware" | "utils";
+type FePkg = "api" | "component" | "hook" | "page" | "state" | "style"
+  | "auth" | "config" | "middleware" | "utils";
 
 export async function Log(
   stack: Stack,
   level: Level,
-  pkg: FrontendPackage,
+  pkg: FePkg,
   message: string
 ): Promise<void> {
   try {
@@ -28,6 +26,6 @@ export async function Log(
       body: JSON.stringify({ stack, level, package: pkg, message }),
     });
   } catch {
-    // silently fail — don't break the app if logging fails
+    // don't let a logging failure break the UI
   }
 }

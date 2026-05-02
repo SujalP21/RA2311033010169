@@ -10,65 +10,58 @@ export interface Notification {
   Timestamp: string;
 }
 
-interface ApiResponse {
-  notifications: Notification[];
-}
-
-/**
- * Fetches all notifications from the evaluation service API.
- */
+// pulls notifications from the evaluation service
 export async function fetchNotifications(): Promise<Notification[]> {
-  await Log("backend", "info", "service", "Initiating notification fetch from evaluation service");
+  await Log("backend", "info", "service", "starting notification fetch");
 
   let token: string;
   try {
     token = await getToken();
-    await Log("backend", "debug", "service", "Bearer token acquired successfully");
+    await Log("backend", "debug", "service", "got bearer token");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    await Log("backend", "error", "service", `Token acquisition failed: ${msg}`);
+    await Log("backend", "error", "service", `token error: ${msg}`);
     throw err;
   }
 
   return new Promise((resolve, reject) => {
-    const urlObj = new URL(NOTIFICATIONS_API);
+    const parsed = new URL(NOTIFICATIONS_API);
 
-    const options: http.RequestOptions = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || 80,
-      path: urlObj.pathname,
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const req = http.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port || 80,
+        path: parsed.pathname,
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
       },
-    };
+      (res) => {
+        let raw = "";
+        res.on("data", (c: string) => (raw += c));
+        res.on("end", async () => {
+          if (res.statusCode !== 200) {
+            await Log("backend", "error", "service", `got HTTP ${res.statusCode}`);
+            reject(new Error(`API status ${res.statusCode}: ${raw}`));
+            return;
+          }
 
-    const req = http.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk: string) => (data += chunk));
-      res.on("end", async () => {
-        if (res.statusCode !== 200) {
-          await Log("backend", "error", "service", `API returned HTTP ${res.statusCode}: ${data}`);
-          reject(new Error(`Notification API returned status ${res.statusCode}: ${data}`));
-          return;
-        }
+          try {
+            const body = JSON.parse(raw);
+            const items = body.notifications || [];
+            await Log("backend", "info", "service", `fetched ${items.length} notifications`);
+            resolve(items);
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            await Log("backend", "error", "service", `parse error: ${msg}`);
+            reject(new Error(`JSON parse failed: ${msg}`));
+          }
+        });
+      }
+    );
 
-        try {
-          const parsed: ApiResponse = JSON.parse(data);
-          const notifications = parsed.notifications || [];
-          await Log("backend", "info", "service", `Successfully fetched ${notifications.length} notifications`);
-          resolve(notifications);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          await Log("backend", "error", "service", `Failed to parse API response: ${msg}`);
-          reject(new Error(`Response parse error: ${msg}`));
-        }
-      });
-    });
-
-    req.on("error", async (err) => {
-      await Log("backend", "fatal", "service", `Network request failed: ${err.message}`);
-      reject(err);
+    req.on("error", async (e) => {
+      await Log("backend", "fatal", "service", `network error: ${e.message}`);
+      reject(e);
     });
 
     req.end();

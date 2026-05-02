@@ -4,114 +4,124 @@
 
 ### Problem Statement
 
-The campus notification platform generates a high volume of notifications across three categories — **Placement**, **Result**, and **Event**. Users report losing track of important notifications. The goal is to implement a **Priority Inbox** that surfaces the top `N` most important unread notifications based on type importance and recency.
+Campus notifications span three categories — **Placement**, **Result**, and **Event**. With a high volume of notifications, users lose track of what matters. The goal: build a **Priority Inbox** that surfaces the top `N` most important items based on type and recency.
 
 ---
 
-### Architecture Overview
+### Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Priority Inbox                        │
-│                                                          │
-│  ┌────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │ Fetch      │───>│ Priority     │───>│ Display      │  │
-│  │ Module     │    │ Engine       │    │ Formatter    │  │
-│  └────────────┘    └──────────────┘    └──────────────┘  │
-│        │                  │                    │          │
-│        ▼                  ▼                    ▼          │
-│  [GET /notifications] [Scoring Algo]   [Ranked Output]   │
-│                                                          │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │            Logging Middleware (cross-cutting)         │ │
-│  └──────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│               Priority Inbox                     │
+│                                                   │
+│  ┌──────────┐   ┌──────────────┐   ┌──────────┐  │
+│  │ Fetcher  │──>│ Scoring      │──>│ Output   │  │
+│  │          │   │ Engine       │   │          │  │
+│  └──────────┘   └──────────────┘   └──────────┘  │
+│       │                │                 │        │
+│       v                v                 v        │
+│  [GET /notifs]    [Composite]     [CLI / React]   │
+│                                                   │
+│  ┌───────────────────────────────────────────────┐│
+│  │      Logging Middleware (cross-cutting)        ││
+│  └───────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Priority Scoring Algorithm
+### Priority Scoring
 
-The composite priority score combines two normalized dimensions:
+Composite score combining two normalized dimensions:
 
 ```
-finalScore = (TYPE_FACTOR × typeScore) + (RECENCY_FACTOR × recencyScore)
+score = (0.6 * typeScore) + (0.4 * recencyScore)
 ```
 
-Where:
-- `TYPE_FACTOR = 0.6` — Type importance is the primary ranking dimension
-- `RECENCY_FACTOR = 0.4` — Recency serves as a secondary factor and tiebreaker
+- **0.6** — Type importance is the primary factor
+- **0.4** — Recency is secondary, also used for tiebreaking
 
 #### Type Weights
 
-| Type       | Weight | Normalized Score | Rationale                                        |
-|------------|--------|------------------|--------------------------------------------------|
-| Placement  | 3      | 1.000            | Career-impacting; requires immediate attention   |
-| Result     | 2      | 0.667            | Academic results; time-sensitive but less urgent  |
-| Event      | 1      | 0.333            | General campus events; informational              |
+| Type       | Weight | Normalized | Why                           |
+|------------|--------|------------|-------------------------------|
+| Placement  | 3      | 1.000      | Career-impacting, urgent      |
+| Result     | 2      | 0.667      | Time-sensitive academics      |
+| Event      | 1      | 0.333      | General information           |
 
-#### Recency Normalization
+#### Recency
 
-Timestamps are normalized to a `[0, 1]` range relative to the current batch:
+Timestamps normalized to `[0, 1]` within the current batch:
 
 ```
-recencyScore = (timestamp - minTimestamp) / (maxTimestamp - minTimestamp)
+recencyScore = (timestamp - min) / (max - min)
 ```
 
-- Score of `1.0` = most recent notification in the batch
-- Score of `0.0` = oldest notification in the batch
-- If all timestamps are identical, all receive a score of `1.0`
+- `1.0` = most recent, `0.0` = oldest
+- If all timestamps match, everyone gets `1.0`
 
 #### Tiebreaking
 
-When two notifications have identical composite scores (within a `0.0001` tolerance), the more recent notification is ranked higher.
+Within `0.0001` tolerance, the more recent notification wins.
 
 ---
 
-### Handling Continuous Incoming Notifications
+### Scaling Considerations
 
-The current implementation uses a **sort-and-slice** approach (`O(n log n)`), suitable for moderate batch sizes (< 1000 notifications). For production-scale streaming:
+Current: **sort-and-slice** at `O(n log n)`, fine for batches under ~1000.
 
-#### Min-Heap Approach (Recommended for Scale)
+For streaming/larger volumes, a **min-heap of size N** would be better:
 
-Maintain a **min-heap** of size `N` (where N = desired top notifications):
-
-1. For each incoming notification, compute its priority score
-2. If the heap has fewer than `N` items, insert directly
-3. If the new score exceeds the heap minimum, replace the min and re-heapify
-4. Time complexity: `O(n log N)` per batch, where N << n
-
-This is optimal when:
-- New notifications arrive continuously (streaming/polling)
-- Only the top `N` are needed (not a full sort)
-- Memory is constrained (only `N` items in memory)
-
-#### Current Implementation Trade-offs
-
-| Aspect          | Current (Sort)       | Min-Heap (Proposed)  |
-|-----------------|----------------------|----------------------|
-| Time            | O(n log n)           | O(n log N)           |
-| Space           | O(n)                 | O(N)                 |
-| Best for        | Small batches        | Streaming/large data |
-| Implementation  | Simple               | Moderate             |
+| Aspect | Sort (current) | Min-Heap         |
+|--------|---------------|------------------|
+| Time   | O(n log n)    | O(n log N)       |
+| Space  | O(n)          | O(N)             |
+| Best   | Small batches | Streaming data   |
 
 ---
 
 ### Module Structure
 
 ```
-notification_app_be/
-├── src/
-│   ├── index.js               # Entry point — orchestrates fetch → rank → display
-│   ├── fetchNotifications.js  # HTTP client for the Notification API
-│   ├── priorityEngine.js      # Scoring algorithm and ranking logic
-│   └── config.js              # Centralized constants and tuning parameters
-└── package.json
-
 logging_middleware/
 ├── src/
-│   ├── index.js               # Log(stack, level, package, message) function
-│   └── auth.js                # Token acquisition and caching
+│   ├── index.ts         # Log(stack, level, pkg, msg) entry point
+│   └── auth.ts          # Token acquisition + caching
+├── tsconfig.json
+└── package.json
+
+notification_app_be/
+├── src/
+│   ├── index.ts         # CLI entry — fetch, rank, display
+│   ├── fetchNotifications.ts
+│   ├── priorityEngine.ts
+│   └── config.ts
+├── tsconfig.json
+└── package.json
+
+notification_app_fe/
+├── src/
+│   ├── main.tsx         # React entry
+│   ├── App.tsx          # Router setup
+│   ├── index.css        # Global earthy theme styles
+│   ├── types.ts
+│   ├── services/
+│   │   ├── auth.ts      # Browser token management
+│   │   ├── api.ts       # Notification fetching + ranking
+│   │   └── logger.ts    # Browser-side Log() using fetch
+│   ├── hooks/
+│   │   ├── useNotifications.ts
+│   │   └── useViewedState.ts
+│   ├── components/
+│   │   ├── Sidebar.tsx
+│   │   ├── FilterBar.tsx
+│   │   ├── NotificationCard.tsx
+│   │   └── Pagination.tsx
+│   └── pages/
+│       ├── AllNotifications.tsx
+│       └── PriorityInbox.tsx
+├── vite.config.ts
+├── tsconfig.json
 └── package.json
 ```
 
@@ -119,46 +129,77 @@ logging_middleware/
 
 ### Logging Strategy
 
-The logging middleware is integrated at every significant decision point:
+The logging middleware is called at key decision points across both backend and frontend:
 
-| Module             | Level   | Examples                                    |
-|--------------------|---------|---------------------------------------------|
-| main               | info    | Application start/stop, final results count |
-| fetchNotifications | info    | Fetch initiation, response count            |
-| fetchNotifications | debug   | Token acquisition status                    |
-| fetchNotifications | error   | HTTP errors, parse failures                 |
-| fetchNotifications | fatal   | Network unreachable                         |
-| priorityEngine     | info    | Ranking started, top/bottom scores          |
-| priorityEngine     | debug   | Timestamp range, type distribution          |
-| priorityEngine     | warn    | Empty notification set                      |
+| Module          | Level | What gets logged                          |
+|-----------------|-------|-------------------------------------------|
+| controller      | info  | App start/stop, result counts             |
+| service         | info  | Fetch start, response count               |
+| service         | debug | Token status, timestamp range             |
+| service         | error | HTTP errors, parse failures               |
+| service         | fatal | Network unreachable                       |
+| page            | info  | Filter changes, page navigation           |
+| hook            | debug | Load params, result count                 |
+| api             | error | Fetch failures                            |
 
 ---
 
 ### API Integration
 
+**Auth API (POST)**
+- `http://20.207.122.201/evaluation-service/auth`
+- Body: `{ email, name, rollNo, accessCode, clientID, clientSecret }`
+- Returns: `{ token_type, access_token, expires_in }`
+
 **Notification API (GET)**
-- Endpoint: `http://20.207.122.201/evaluation-service/notifications`
-- Authentication: Bearer token via `/evaluation-service/auth`
-- Response: `{ "notifications": [{ ID, Type, Message, Timestamp }] }`
+- `http://20.207.122.201/evaluation-service/notifications`
+- Query params: `limit`, `page`, `notification_type`
+- Notification types: `"Event"`, `"Result"`, `"Placement"`
+- Auth: Bearer token header
+- Returns: `{ "notifications": [{ ID, Type, Message, Timestamp }] }`
 
 **Log API (POST)**
-- Endpoint: `http://20.207.122.201/evaluation-service/logs`
-- Payload: `{ stack, level, package, message }`
-- Authentication: Bearer token (same auth flow)
+- `http://20.207.122.201/evaluation-service/logs`
+- Body: `{ stack, level, package, message }`
+- Auth: Bearer token header
+- Returns: `{ logID, message }`
 
 ---
 
-### Sample Output
+# Stage 2
 
-Running `node src/index.js 10` produces:
+## Frontend Implementation
 
-| Rank | Type      | Score  | Message                          |
-|------|-----------|--------|----------------------------------|
-| 1    | Placement | 0.98   | Nvidia Corporation hiring        |
-| 2    | Placement | 0.8827 | Eli Lilly and Company hiring     |
-| 3    | Placement | 0.8439 | Marriott International Inc.      |
-| 4    | Result    | 0.80   | mid-sem                          |
-| 5    | Result    | 0.7803 | end-sem                          |
-| ...  | ...       | ...    | ...                              |
+### Tech Stack
+- React 18 with TypeScript
+- Vite dev server (port 3000)
+- Vanilla CSS with earthy color palette
+- React Router for page navigation
 
-The output confirms the priority model: Placements dominate the top positions due to their higher type weight, while recent Results outrank older Placements (e.g., Rank #4 mid-sem beats Rank #6 Broadcom).
+### Pages
+
+**All Notifications** (`/`)
+- Paginated list with server-side `limit`/`page` params
+- Type filter (Placement / Result / Event)
+- Stats bar showing counts by type
+- New vs viewed distinction using localStorage
+
+**Priority Inbox** (`/priority`)
+- Client-side ranking using composite scoring
+- Configurable top-N (5/10/15/20)
+- Priority scores displayed on each card
+- Same type filtering capability
+
+### API Proxy
+
+The frontend uses Vite's dev server proxy to avoid CORS issues:
+
+```
+Browser → localhost:3000/api/* → Vite proxy → 20.207.122.201/evaluation-service/*
+```
+
+The auth token is obtained in-browser and attached to every request.
+
+### New vs Viewed
+
+Notification IDs are tracked in `localStorage` under `viewed_notifs`. Clicking a notification marks it as viewed. New notifications show a pulsing terracotta dot; viewed ones are slightly dimmed.
