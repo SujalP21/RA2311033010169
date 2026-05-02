@@ -1,47 +1,54 @@
+import { ToggleButton, ToggleButtonGroup, FormControl, InputLabel, Select, MenuItem, Box } from "@mui/material";
 import type { NotificationType } from "../types";
 
-interface FilterBarProps {
+interface Props {
   activeType: NotificationType | null;
-  onTypeChange: (type: NotificationType | null) => void;
+  onTypeChange: (t: NotificationType | null) => void;
   limit: number;
-  onLimitChange: (limit: number) => void;
+  onLimitChange: (l: number) => void;
 }
 
-export function FilterBar({ activeType, onTypeChange, limit, onLimitChange }: FilterBarProps) {
-  const types: { label: string; value: NotificationType | null; className: string }[] = [
-    { label: "All", value: null, className: "" },
-    { label: "Placement", value: "Placement", className: "placement" },
-    { label: "Result", value: "Result", className: "result" },
-    { label: "Event", value: "Event", className: "event" },
-  ];
+export function FilterBar({ activeType, onTypeChange, limit, onLimitChange }: Props) {
+  // MUI ToggleButtonGroup expects string | null
+  const handleType = (_: React.MouseEvent, val: string | null) => {
+    onTypeChange(val as NotificationType | null);
+  };
 
   return (
-    <div className="filter-bar">
-      <div className="filter-group">
-        {types.map((t) => (
-          <button
-            key={t.label}
-            className={`filter-btn ${t.className} ${activeType === t.value ? "active" : ""}`}
-            onClick={() => onTypeChange(t.value)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2.5, flexWrap: "wrap" }}>
+      <ToggleButtonGroup
+        value={activeType}
+        exclusive
+        onChange={handleType}
+        size="small"
+        sx={{
+          "& .MuiToggleButton-root": {
+            px: 2, py: 0.7, fontSize: "0.82rem", fontWeight: 500,
+            border: "1px solid", borderColor: "divider",
+            "&.Mui-selected": { bgcolor: "primary.main", color: "#fff", "&:hover": { bgcolor: "primary.dark" } },
+          },
+        }}
+      >
+        <ToggleButton value={null as unknown as string}>All</ToggleButton>
+        <ToggleButton value="Placement">Placement</ToggleButton>
+        <ToggleButton value="Result">Result</ToggleButton>
+        <ToggleButton value="Event">Event</ToggleButton>
+      </ToggleButtonGroup>
 
-      <div className="limit-selector">
-        <label htmlFor="limit-select">Show:</label>
-        <select
-          id="limit-select"
+      <FormControl size="small" sx={{ minWidth: 90, ml: "auto" }}>
+        <InputLabel>Show</InputLabel>
+        <Select
           value={limit}
+          label="Show"
           onChange={(e) => onLimitChange(Number(e.target.value))}
+          sx={{ fontSize: "0.85rem" }}
         >
-          <option value={5}>5</option>
-          <option value={10}>10</option>
-          <option value={15}>15</option>
-          <option value={20}>20</option>
-        </select>
-      </div>
-    </div>
+          <MenuItem value={5}>5</MenuItem>
+          <MenuItem value={10}>10</MenuItem>
+          <MenuItem value={15}>15</MenuItem>
+          <MenuItem value={20}>20</MenuItem>
+        </Select>
+      </FormControl>
+    </Box>
   );
 }

@@ -1,4 +1,7 @@
 import { useState, useMemo } from "react";
+import {
+  Box, Typography, Paper, CircularProgress, Alert, Button, Stack,
+} from "@mui/material";
 import { useNotifications } from "../hooks/useNotifications";
 import { useViewedState } from "../hooks/useViewedState";
 import { NotificationCard } from "../components/NotificationCard";
@@ -7,15 +10,18 @@ import { Pagination } from "../components/Pagination";
 import { Log } from "../services/logger";
 import type { NotificationType } from "../types";
 
+// stat colors matching the earthy theme
+const STAT_COLORS: Record<string, string> = {
+  Placement: "#5C6B4F", Result: "#8B6F47", Event: "#C67F59",
+};
+
 export function AllNotifications() {
   const [typeFilter, setTypeFilter] = useState<NotificationType | null>(null);
   const [limit, setLimit] = useState(10);
   const [page, setPage] = useState(1);
 
   const { notifications, loading, error, reload } = useNotifications({
-    limit,
-    page,
-    notificationType: typeFilter,
+    limit, page, notificationType: typeFilter,
   });
 
   const { markViewed, isViewed } = useViewedState();
@@ -30,84 +36,67 @@ export function AllNotifications() {
   }, [notifications, isViewed]);
 
   const onTypeChange = async (t: NotificationType | null) => {
-    setTypeFilter(t);
-    setPage(1);
+    setTypeFilter(t); setPage(1);
     await Log("frontend", "info", "page", `filter: ${t || "all"}`);
   };
 
   const onLimitChange = async (l: number) => {
-    setLimit(l);
-    setPage(1);
+    setLimit(l); setPage(1);
     await Log("frontend", "info", "page", `limit: ${l}`);
   };
 
   return (
-    <div>
-      <div className="page-header">
-        <h2>All Notifications</h2>
-        <p>Browse campus notifications with type filters and pagination</p>
-      </div>
+    <Box>
+      <Typography variant="h5" gutterBottom>All Notifications</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Browse campus notifications with type filters and pagination
+      </Typography>
 
-      <div className="stats-row">
-        <div className="stat-card">
-          <div className="stat-value">{stats.total}</div>
-          <div className="stat-label">Showing</div>
-        </div>
-        <div className="stat-card placement">
-          <div className="stat-value">{stats.Placement}</div>
-          <div className="stat-label">Placements</div>
-        </div>
-        <div className="stat-card result">
-          <div className="stat-value">{stats.Result}</div>
-          <div className="stat-label">Results</div>
-        </div>
-        <div className="stat-card event">
-          <div className="stat-value">{stats.Event}</div>
-          <div className="stat-label">Events</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats.unread}</div>
-          <div className="stat-label">New</div>
-        </div>
-      </div>
+      {/* stats */}
+      <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap" }}>
+        {[
+          { label: "Showing", value: stats.total },
+          { label: "Placements", value: stats.Placement, color: STAT_COLORS.Placement },
+          { label: "Results", value: stats.Result, color: STAT_COLORS.Result },
+          { label: "Events", value: stats.Event, color: STAT_COLORS.Event },
+          { label: "New", value: stats.unread },
+        ].map((s) => (
+          <Paper key={s.label} variant="outlined" sx={{ px: 2.5, py: 1.5, flex: 1, minWidth: 100 }}>
+            <Typography variant="h5" sx={{ color: s.color || "text.primary" }}>{s.value}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              {s.label}
+            </Typography>
+          </Paper>
+        ))}
+      </Box>
 
-      <FilterBar
-        activeType={typeFilter}
-        onTypeChange={onTypeChange}
-        limit={limit}
-        onLimitChange={onLimitChange}
-      />
+      <FilterBar activeType={typeFilter} onTypeChange={onTypeChange} limit={limit} onLimitChange={onLimitChange} />
 
       {loading && (
-        <div className="loading-state">
-          <div className="spinner" />
-          <span>Loading...</span>
-        </div>
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+          <CircularProgress color="primary" />
+        </Box>
       )}
 
       {error && (
-        <div className="error-state">
-          <p>Error: {error}</p>
-          <button onClick={reload}>Retry</button>
-        </div>
+        <Alert severity="error" sx={{ mb: 2 }} action={<Button size="small" onClick={reload}>Retry</Button>}>
+          {error}
+        </Alert>
       )}
 
       {!loading && !error && notifications.length === 0 && (
-        <div className="empty-state">No notifications match this filter.</div>
+        <Typography color="text.secondary" sx={{ textAlign: "center", py: 6 }}>
+          No notifications match this filter.
+        </Typography>
       )}
 
       {!loading && !error && notifications.length > 0 && (
         <>
-          <div className="notifications-grid">
+          <Stack spacing={1.2}>
             {notifications.map((n) => (
-              <NotificationCard
-                key={n.ID}
-                notification={n}
-                isViewed={isViewed(n.ID)}
-                onView={markViewed}
-              />
+              <NotificationCard key={n.ID} notification={n} isViewed={isViewed(n.ID)} onView={markViewed} />
             ))}
-          </div>
+          </Stack>
           <Pagination
             currentPage={page}
             onPageChange={(p) => { setPage(p); Log("frontend", "info", "page", `page ${p}`); }}
@@ -115,6 +104,6 @@ export function AllNotifications() {
           />
         </>
       )}
-    </div>
+    </Box>
   );
 }
